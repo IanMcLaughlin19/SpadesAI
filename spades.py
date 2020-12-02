@@ -1,6 +1,7 @@
 import pyCardDeck
 from typing import List
-from agents import Agent
+from agents import Agent, RandomAgent
+import random
 class Spades:
 
     def __init__(self, players: List[Agent], verbose=False):
@@ -14,14 +15,29 @@ class Spades:
         self.player_won_last_hand = None
         self.board = {}
         self.order_played = {}
+        self.final_scores = Spades.initialize_player_dict(players)
         Spades.assert_unique_index(players)
 
     @classmethod
     def assert_unique_index(cls, players):
-        indexes_list = list(map(lambda x: x.index))
+        indexes_list = list(map(lambda x: x.index, players))
         indexes_set = set(indexes_list)
-        if not len(indexes_list) == indexes_set:
+        if not len(indexes_list) == len(indexes_set):
             raise AssertionError("All players must have a unique index")
+
+    def play_x_games(self, num_games=100):
+        score_board = Spades.initialize_player_dict(self.players)
+        win_losses = Spades.initialize_player_dict(self.players)
+        for game in range(num_games):
+            random.shuffle(self.players)
+            new_game = Spades(self.players)
+            new_game.play_spades()
+            for player in self.players:
+                score_board[player.index] += new_game.final_scores[player.index]
+                winner = max(new_game.final_scores, key=new_game.final_scores.get)
+                if winner == player.index:
+                    win_losses[player.index] += 1
+        print("Score Board ", str(score_board), " win losses ", str(win_losses))
 
     def play_spades(self):
         self.initial_deal()
@@ -31,7 +47,22 @@ class Spades:
             self.update_winner()
             self.board = {}
             self.order_played = {}
+        self.score_game()
+        print("Score ", str(self.scores))
+        print("bets ", str(self.bets))
+        print("Winner is player ", max(self.final_scores, key=self.final_scores.get), "with score ", max(self.final_scores.values()))
 
+    def score_game(self):
+        for player in self.players:
+            player_bet = self.bets[player.index]
+            player_score = self.scores[player.index]
+            if player_bet > player_score:
+                continue
+            elif player_bet == player_score:
+                self.final_scores[player.index] = player_bet * 10
+            elif player_bet < player_score:
+                difference = player_score - player_bet
+                self.final_scores[player.index] = player_bet * 10 - (difference * 10)
 
     def get_legal_moves(self, player: Agent):
         spades_in_hand = list(filter(lambda card: card.suit == "Spades", player.hand))
@@ -46,12 +77,14 @@ class Spades:
             same_suit_cards_in_hand = list(filter(lambda card: card.suit == first_card_suit, player.hand))
             if same_suit_cards_in_hand:
                 return same_suit_cards_in_hand + spades_in_hand
+            else:
+                return player.hand
 
 
     def place_bets(self):
         for player in self.players:
-            player_bet = player.make_bet(self)
-            self.bets[player.index]= player_bet
+            player_bet = player.make_bet(self, num_players=len(self.players))
+            self.bets[player.index] = player_bet
             if self.verbose:
                 print("Player ", player.index, " places bet ", player_bet)
 
@@ -59,11 +92,17 @@ class Spades:
         playing_order = self.get_playing_order()
         index = 0
         for player in playing_order:
-            action = player.getAction(self)
-            self.board[index] = action
-            self.order_played[index] = player.index
+            card = player.getAction(self)
+            self.place_card(card, player, index)
+            #print("Player {0} hand {1}".format(player.index, str(player.hand)))
             if self.verbose:
-                print("Player ", player.index, " made move ", str(action))
+                print("Player ", player.index, " made move ", str(card))
+            index += 1
+
+    def place_card(self, card, player, index):
+        player.hand.remove(card)
+        self.board[index] = card
+        self.order_played[index] = player.index
 
 
     def get_playing_order(self):
@@ -135,8 +174,10 @@ class Spades:
 
 
 
-
-
+if __name__ == "__main__":
+    players = [RandomAgent(1), RandomAgent(2),RandomAgent(3), RandomAgent(4)]
+    game = Spades(players=players, verbose=True)
+    game.play_x_games(1000)
 
 
 
