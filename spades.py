@@ -36,6 +36,7 @@ class Spades:
     def play_x_games(self, num_games=100):
         score_board = Spades.initialize_player_dict(self.players)
         win_losses = Spades.initialize_player_dict(self.players)
+        score_board_last_100 = Spades.initialize_player_dict(self.players)
         for game in range(num_games):
             random.shuffle(self.players)
             new_game = Spades(self.players)
@@ -45,6 +46,10 @@ class Spades:
                 winner = max(new_game.final_scores, key=new_game.final_scores.get)
                 if winner == player.index:
                     win_losses[player.index] += 1
+                    score_board_last_100[player.index] +=1
+                if game % 100 == 0:
+                    print("Score board last 100: ", str(score_board_last_100))
+                    score_board_last_100 = Spades.initialize_player_dict(self.players)
             print("Games completed: ", game)
         print("Score Board ", str(score_board), " win losses ", str(win_losses))
 
@@ -119,10 +124,15 @@ class Spades:
             if self.verbose:
                 print("Player ", player.index, " made move ", str(card))
             index += 1
+        max_score = 0
+        for player in playing_order:
+            score = self.scores[player.index]
+            if score > max_score:
+                max_score = score
         for player in playing_order:
             if type(player) == QLearningAgent:
                 if self.terminal_test():
-                    reward = self.scores[player.index] * 10
+                    reward = (self.scores[player.index] - max_score) * 10
                 else:
                     reward = -1
                 player.update(original_state, action, self, reward)
@@ -138,15 +148,25 @@ class Spades:
     def get_playing_order(self):
         if self.player_won_last_hand is None:
             return self.players
-        temp_players = self.players.copy()
-        starting_player_index = self.players.index(self.player_won_last_hand)
-        if starting_player_index == 0:
-            return self.players
         else:
+            temp_players = self.players.copy()
+            starting_player = temp_players.index(self.player_won_last_hand)
             result = []
-            result.append(temp_players[starting_player_index - 1:])
-            result.append(temp_players[:starting_player_index])
+            count = starting_player
+            for i in range(len(temp_players)):
+                try:
+                    result.append(temp_players[count])
+                except IndexError:
+                    count = 0
+                    result.append(temp_players[count])
+                count += 1
             return result
+
+    def get_player_by_index(self, index):
+        for p in self.players:
+            if p.index == index:
+                return p
+
 
     @classmethod
     def initialize_player_dict(cls, players:List[Agent]):
@@ -198,6 +218,7 @@ class Spades:
             max_card = first_card
             winner_index = 0
         player_who_won = self.order_played[winner_index]
+        self.player_won_last_hand = self.get_player_by_index(player_who_won)
         self.scores[player_who_won] += 1
         if self.verbose:
             print("Player ", player_who_won, " won turn with card ", str(max_card))
@@ -212,13 +233,26 @@ class Spades:
 
 
 import pickle
+import datetime as dt
+import numpy as np
 if __name__ == "__main__":
-    #learned_agent = pickle.load(open("save.p", "rb"))
+    # MAYBE TRY REWARD BEING DIFFERENCE BETWEEN YOUR SCORE AND OTHER PERSONS SCORE
+    games_to_play=20000
+    time_stamp = dt.datetime.now()
+    day = str(time_stamp.day)
+    hour = str(time_stamp.hour)
+    minute = str(time_stamp.minute)
+    full_ft = '-'.join([day, hour, minute])
     QL_AGENT = QLearningAgent(1)
     players = [QL_AGENT, RandomAgent(2)]
     game = Spades(players=players, verbose=False)
-    game.play_x_games(500)
-    pickle.dump(QL_AGENT, open("save.p", "wb"))
+    game.play_x_games(games_to_play)
+    pickle.dump(QL_AGENT, open("num_games_" + str(games_to_play) + "_" + str(full_ft) + ".p", "wb"))
+    QL_AGENT_2 = QLearningAgent(5)
+    list_players_2 = [QL_AGENT_2, RandomAgent(6), RandomAgent(7), RandomAgent(8)]
+    second_game = Spades(list_players_2)
+    second_game  .play_x_games(20000)
+    pickle.dump(QL_AGENT_2, open("num_games_" + str(games_to_play) + "_" + str(full_ft) + "4player"+ ".p", "wb"))
 
 
 
