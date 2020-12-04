@@ -10,6 +10,15 @@ class Agent:
         self.index = index
         self.hand = []
 
+    def start_episode(self):
+        pass
+
+    def update(self, state, action, nextState, reward):
+        pass
+
+    def end_episode(self):
+        pass
+
     def getAction(self, state):
         """
         Return the action that the agent takes
@@ -145,7 +154,7 @@ class RandomAgent(Agent):
 class QLearningAgent(Agent):
 
 
-    def __init__(self, index=0, num_training=100, epsilon=.5, alpha=.5, gamma=1):
+    def __init__(self, index=0, num_training=100, epsilon=.5, alpha=.5, gamma=1, q_values={}):
         Agent.__init__(self, index=index)
         self.episodes_so_far=0.0
         self.accum_train_rewards = 0.0
@@ -156,6 +165,23 @@ class QLearningAgent(Agent):
         self.discount = float(gamma)
         self.q_values_betting = {}
         self.q_values = {}
+        self.reward_this_episode = 0
+        self.episodes_rewards = {0:0}
+
+    @classmethod
+    def create_optimal_agent(cls, index, trained_agent):
+        result = QLearningAgent(index=index, epsilon=0, q_values=trained_agent.q_values)
+        return result
+
+
+    def start_episode(self):
+        self.reward_this_episode = 0
+        max_episodes = max(self.episodes_rewards)
+        self.episodes_rewards[max_episodes+1] = 0
+
+    def end_episode(self):
+        cur_episode = max(self.episodes_rewards)
+        self.episodes_rewards[cur_episode] = self.reward_this_episode
 
     def make_bet(self, state, num_players=2):
         return 13
@@ -294,6 +320,7 @@ class QLearningAgent(Agent):
         next_q_value = self.computeValueFromQValues(nextState)
         updated_q_value = original_q_value + self.alpha * (reward + self.discount * next_q_value - original_q_value)
         self.set_q_values(state, action, updated_q_value)
+        self.reward_this_episode += reward
 
     def set_q_values(self, state, action, updated_q_value):
         state_action_rep = self.create_state_action_rep(state, action)
@@ -336,7 +363,6 @@ class QLearningAgent(Agent):
 
     def create_board_representation(self, state):
         board = state.board
-        print("BOARD: " + str(board))
         if not board or len(board) > 1:
             return ("EMPTY", )
         else:
@@ -408,14 +434,15 @@ class QLearningAgentOld(Agent):
         return (combined_value_non_spades, combined_value_spades)
 
     def make_bet(self, state, num_players=2):
-        legal_bets = self.get_legal_bets(state)
+        return RandomAgent.make_bet(state)
+        """legal_bets = self.get_legal_bets(state)
         exploration = QLearningAgent.flipCoin(self.epsilon)
         if exploration:
             exploration_action = self.make_random_bet(state)
             return exploration_action
         else:
             exploitation_action = self.get_bet_policy(state)
-            return exploitation_action
+            return exploitation_action"""
 
     def make_random_bet(self, state):
         """

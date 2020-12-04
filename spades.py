@@ -25,6 +25,7 @@ class Spades:
         self.simple_scoring = simple_scoring
         Spades.assert_unique_index(players)
 
+
     @classmethod
     def assert_unique_index(cls, players):
         indexes_list = list(map(lambda x: x.index, players))
@@ -44,9 +45,12 @@ class Spades:
                 winner = max(new_game.final_scores, key=new_game.final_scores.get)
                 if winner == player.index:
                     win_losses[player.index] += 1
+            print("Games completed: ", game)
         print("Score Board ", str(score_board), " win losses ", str(win_losses))
 
     def play_spades(self):
+        for player in self.players:
+            player.start_episode()
         self.initial_deal()
         self.place_bets()
         while not self.terminal_test():
@@ -55,9 +59,12 @@ class Spades:
             self.board = {}
             self.order_played = {}
         self.score_game()
-        print("Score ", str(self.scores))
-        print("bets ", str(self.bets))
-        print("Winner is player ", max(self.final_scores, key=self.final_scores.get), "with score ", max(self.final_scores.values()))
+        for player in self.players:
+            player.end_episode()
+        if self.verbose:
+            print("Score ", str(self.scores))
+            print("bets ", str(self.bets))
+            print("Winner is player ", max(self.final_scores, key=self.final_scores.get), "with score ", max(self.final_scores.values()))
 
     def score_game(self):
         for player in self.players:
@@ -101,15 +108,14 @@ class Spades:
     def play_turn(self):
         playing_order = self.get_playing_order()
         index = 0
-        original_state = deepcopy(self)
         for player in playing_order:
             if type(player) == QLearningAgent:
+                original_state = deepcopy(self)
                 action = player.getAction(self)
                 card = player.map_legal_actions_to_action(action, self)
             else:
                 card = player.getAction(self)
             self.place_card(card, player, index)
-            #print("Player {0} hand {1}".format(player.index, str(player.hand)))
             if self.verbose:
                 print("Player ", player.index, " made move ", str(card))
             index += 1
@@ -124,7 +130,6 @@ class Spades:
 
 
     def place_card(self, card, player, index):
-        print("Card ", str(card), "\n" ,"Hand ", str(player.hand))
         player.hand.remove(card)
         self.board[index] = card
         self.order_played[index] = player.index
@@ -208,10 +213,12 @@ class Spades:
 
 import pickle
 if __name__ == "__main__":
-    players = [QLearningAgent(1), RandomAgent(2)]
-    game = Spades(players=players, verbose=True)
-    game.play_x_games(10000)
-    pickle.dump(players[0], open("save.p", "wb"))
+    #learned_agent = pickle.load(open("save.p", "rb"))
+    QL_AGENT = QLearningAgent(1)
+    players = [QL_AGENT, RandomAgent(2)]
+    game = Spades(players=players, verbose=False)
+    game.play_x_games(500)
+    pickle.dump(QL_AGENT, open("save.p", "wb"))
 
 
 
