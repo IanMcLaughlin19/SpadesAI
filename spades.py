@@ -1,10 +1,16 @@
 import pyCardDeck
 from typing import List
-from agents import Agent, RandomAgent
+from agents import Agent, RandomAgent, QLearningAgent
 import random
+from copy import deepcopy
 class Spades:
 
-    def __init__(self, players: List[Agent], verbose=False):
+    def __init__(self, players: List[Agent], verbose=False, simple_scoring=False):
+        """
+        :param players: List of Agents to play a simulated game
+        :param verbose: will print out satements on game acitojns
+        :param simple_scoring: If true will just score based on who wins the most tricks
+        """
         self.deck = pyCardDeck.Deck()
         self.deck.load_standard_deck()
         self.players = players
@@ -16,6 +22,7 @@ class Spades:
         self.board = {}
         self.order_played = {}
         self.final_scores = Spades.initialize_player_dict(players)
+        self.simple_scoring = simple_scoring
         Spades.assert_unique_index(players)
 
     @classmethod
@@ -56,13 +63,16 @@ class Spades:
         for player in self.players:
             player_bet = self.bets[player.index]
             player_score = self.scores[player.index]
-            if player_bet > player_score:
-                continue
-            elif player_bet == player_score:
-                self.final_scores[player.index] = player_bet * 10
-            elif player_bet < player_score:
-                difference = player_score - player_bet
-                self.final_scores[player.index] = player_bet * 10 - (difference * 10)
+            if not self.simple_scoring:
+                if player_bet > player_score:
+                    continue
+                elif player_bet == player_score:
+                    self.final_scores[player.index] = player_bet * 10
+                elif player_bet < player_score:
+                    difference = player_score - player_bet
+                    self.final_scores[player.index] = player_bet * 10 - (difference * 10)
+            else:
+                self.final_scores[player.index] = player_score * 10
 
     def get_legal_moves(self, player: Agent):
         spades_in_hand = list(filter(lambda card: card.suit == "Spades", player.hand))
@@ -91,15 +101,30 @@ class Spades:
     def play_turn(self):
         playing_order = self.get_playing_order()
         index = 0
+        original_state = deepcopy(self)
         for player in playing_order:
-            card = player.getAction(self)
+            if type(player) == QLearningAgent:
+                action = player.getAction(self)
+                card = player.map_legal_actions_to_action(action, self)
+            else:
+                card = player.getAction(self)
             self.place_card(card, player, index)
             #print("Player {0} hand {1}".format(player.index, str(player.hand)))
             if self.verbose:
                 print("Player ", player.index, " made move ", str(card))
             index += 1
+        for player in playing_order:
+            if type(player) == QLearningAgent:
+                if self.terminal_test():
+                    reward = self.scores[player.index] * 10
+                else:
+                    reward = -1
+                player.update(original_state, action, self, reward)
+
+
 
     def place_card(self, card, player, index):
+        print("Card ", str(card), "\n" ,"Hand ", str(player.hand))
         player.hand.remove(card)
         self.board[index] = card
         self.order_played[index] = player.index
@@ -172,12 +197,21 @@ class Spades:
         if self.verbose:
             print("Player ", player_who_won, " won turn with card ", str(max_card))
 
+    def cards_on_board(self):
+        return bool(self.board)
+
+    def get_lead_card(self):
+        if not self.cards_on_board():
+            return AssertionError("No cards on board")
+        return self.board[0]
 
 
+import pickle
 if __name__ == "__main__":
-    players = [RandomAgent(1), RandomAgent(2),RandomAgent(3), RandomAgent(4)]
+    players = [QLearningAgent(1), RandomAgent(2)]
     game = Spades(players=players, verbose=True)
-    game.play_x_games(1000)
+    game.play_x_games(10000)
+    pickle.dump(players[0], open("save.p", "wb"))
 
 
 
