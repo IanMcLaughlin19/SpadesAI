@@ -151,7 +151,7 @@ class Spades:
                 max_score = score
         if self.terminal_test():
             if self.scores[agent.index] == max_score:
-                reward = 100
+                reward = 250
             else:
                 reward = -100
         else:

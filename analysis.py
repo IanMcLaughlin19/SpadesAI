@@ -1,6 +1,6 @@
 import pickle
 import matplotlib.pyplot as plt
-test_p = pickle.load(open("QLAGENT_GAMES_1005-14-52-56.p", "rb"))
+test_p = pickle.load(open("QLAGENT_GAMES_50005-16-19-14.p", "rb"))
 from spades import Spades
 import spades
 import agents
