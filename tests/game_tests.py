@@ -58,6 +58,25 @@ class GameTests(unittest.TestCase):
         scores = new_game.scores
         self.assertEqual(1, max(scores.values()))
 
+    def test_update_winner(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        players[0].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[1].hand.append(pyCardDeck.PokerCard("Spades", 9, "Ten"))
+        self.assertDictEqual(new_game.scores, {1:0, 2:0})
+        new_game.play_turn()
+        new_game.update_winner()
+        self.assertDictEqual(new_game.scores, {1:1, 2:0})
+
+    def test_update_winner_2(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        for i in range(20):
+            players[0].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+            players[1].hand.append(pyCardDeck.PokerCard("Spades", 9, "Ten"))
+            new_game.play_full_turn()
+        self.assertDictEqual(new_game.scores, {1:20, 2:0})
+
 class QLearningTests(unittest.TestCase):
     def setUp(self) -> None:
         self.test_players = [QLearningAgent(1), RandomAgent(2)]

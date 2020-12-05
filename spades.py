@@ -37,20 +37,32 @@ class Spades:
         score_board = Spades.initialize_player_dict(self.players)
         win_losses = Spades.initialize_player_dict(self.players)
         score_board_last_100 = Spades.initialize_player_dict(self.players)
+        round_gone_first_last_100 = Spades.initialize_player_dict(self.players)
+        count_first_player_wins_last_100 = 0
         for game in range(num_games):
-            random.shuffle(self.players)
-            new_game = Spades(self.players)
+            shuffled_first_move = sorted(self.players, key=lambda k: random.random())
+            new_game = Spades(shuffled_first_move)
             new_game.play_spades()
+            order_index = 0
             for player in self.players:
                 score_board[player.index] += new_game.final_scores[player.index]
                 winner = max(new_game.final_scores, key=new_game.final_scores.get)
                 if winner == player.index:
                     win_losses[player.index] += 1
                     score_board_last_100[player.index] +=1
+                    if order_index == 0:
+                        count_first_player_wins_last_100 += 1
                 if game % 100 == 0:
                     print("Score board last 100: ", str(score_board_last_100))
+                    print("Gone first last 100: ", str(count_first_player_wins_last_100))
                     score_board_last_100 = Spades.initialize_player_dict(self.players)
-            print("Games completed: ", game)
+                    round_gone_first_last_100 = 0
+                if order_index == 0:
+                    pass
+                    #round_gone_first_last_100[player.index] += 1
+                order_index += 1
+            if game % 20 == 0:
+                print("Games completed: ", game)
         print("Score Board ", str(score_board), " win losses ", str(win_losses))
 
     def play_spades(self):
@@ -59,10 +71,7 @@ class Spades:
         self.initial_deal()
         self.place_bets()
         while not self.terminal_test():
-            self.play_turn()
-            self.update_winner()
-            self.board = {}
-            self.order_played = {}
+            self.play_full_turn()
         self.score_game()
         for player in self.players:
             player.end_episode()
@@ -71,6 +80,11 @@ class Spades:
             print("bets ", str(self.bets))
             print("Winner is player ", max(self.final_scores, key=self.final_scores.get), "with score ", max(self.final_scores.values()))
 
+    def play_full_turn(self):
+        self.play_turn()
+        self.update_winner()
+        self.board = {}
+        self.order_played = {}
     def score_game(self):
         for player in self.players:
             player_bet = self.bets[player.index]
@@ -124,18 +138,25 @@ class Spades:
             if self.verbose:
                 print("Player ", player.index, " made move ", str(card))
             index += 1
-        max_score = 0
+
         for player in playing_order:
+            reward = self.reward_function(player)
+            player.update(original_state, action, self, reward)
+
+    def reward_function(self, agent: Agent):
+        max_score = 0
+        for player in self.players:
             score = self.scores[player.index]
             if score > max_score:
                 max_score = score
-        for player in playing_order:
-            if type(player) == QLearningAgent:
-                if self.terminal_test():
-                    reward = (self.scores[player.index] - max_score) * 10
-                else:
-                    reward = -1
-                player.update(original_state, action, self, reward)
+        if self.terminal_test():
+            if self.scores[agent.index] == max_score:
+                reward = 100
+            else:
+                reward = -100
+        else:
+            reward = -5
+        return reward
 
 
 
@@ -211,7 +232,8 @@ class Spades:
             elif card.suit == "Spades" and max_card.suit != "Spades":
                 max_card = card
                 winner_index = card_index
-            elif card.suit == first_card_suit and card.rank > first_card.rank:
+            elif card.suit == first_card_suit and\
+                    Agent.convert_card_rank_to_int(card) > Agent.convert_card_rank_to_int(first_card):
                 max_card = card
                 winner_index = card_index
         if max_card is None:
@@ -235,24 +257,32 @@ class Spades:
 import pickle
 import datetime as dt
 import numpy as np
-if __name__ == "__main__":
-    # MAYBE TRY REWARD BEING DIFFERENCE BETWEEN YOUR SCORE AND OTHER PERSONS SCORE
-    games_to_play=20000
+
+def run_x_games_and_pickle(players, num_games, pickle_index=[0]):
+    """
+    run many games with players and pickle
+    """
+    game = Spades(players)
+    game.play_x_games(num_games)
+    for pick in pickle_index:
+        file_name = "QLAGENT_GAMES_" + str(num_games) + get_time_stamp() +".p"
+        pickle.dump(players[pick], open(file_name, "wb"))
+
+
+
+def get_time_stamp():
     time_stamp = dt.datetime.now()
     day = str(time_stamp.day)
     hour = str(time_stamp.hour)
     minute = str(time_stamp.minute)
-    full_ft = '-'.join([day, hour, minute])
-    QL_AGENT = QLearningAgent(1)
-    players = [QL_AGENT, RandomAgent(2)]
-    game = Spades(players=players, verbose=False)
-    game.play_x_games(games_to_play)
-    pickle.dump(QL_AGENT, open("num_games_" + str(games_to_play) + "_" + str(full_ft) + ".p", "wb"))
-    QL_AGENT_2 = QLearningAgent(5)
-    list_players_2 = [QL_AGENT_2, RandomAgent(6), RandomAgent(7), RandomAgent(8)]
-    second_game = Spades(list_players_2)
-    second_game  .play_x_games(20000)
-    pickle.dump(QL_AGENT_2, open("num_games_" + str(games_to_play) + "_" + str(full_ft) + "4player"+ ".p", "wb"))
+    second = str(time_stamp.second)
+    full_ft = '-'.join([day, hour, minute, second])
+    return full_ft
+
+if __name__ == "__main__":
+    players = [QLearningAgent(1), RandomAgent(2)]
+    run_x_games_and_pickle(players, 5000)
+
 
 
 

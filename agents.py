@@ -137,7 +137,8 @@ class RandomAgent(Agent):
         """
         :return: random int from the normal distribution of total rounds / num players
         """
-        num_turns = round(52/num_players)
+        return 13
+        """num_turns = round(52/num_players)
         mu = round(num_turns/2)
         sigma = 2.0
         random_distribution = np.random.randn(100000) * sigma + mu
@@ -146,7 +147,7 @@ class RandomAgent(Agent):
             bet = mu * 2
         elif bet < 0:
             bet = 0
-        return bet
+        return bet"""
 
     def getLegalActions(self, state):
         return state.get_legal_moves(self)
@@ -154,7 +155,7 @@ class RandomAgent(Agent):
 class QLearningAgent(Agent):
 
 
-    def __init__(self, index=0, num_training=100, epsilon=.1, alpha=.5, gamma=1, q_values={}):
+    def __init__(self, index=0, num_training=100, epsilon=.1, alpha=.2, gamma=1, q_values={}):
         Agent.__init__(self, index=index)
         self.episodes_so_far=0.0
         self.accum_train_rewards = 0.0
@@ -184,7 +185,7 @@ class QLearningAgent(Agent):
         self.episodes_rewards[cur_episode] = self.reward_this_episode
 
     def make_bet(self, state, num_players=2):
-        return RandomAgent.make_bet(self, state)
+        return 13#RandomAgent.make_bet(self, state)
 
     def getLegalActions(self, state):
         """
@@ -318,6 +319,8 @@ class QLearningAgent(Agent):
         # Q(s, a) <- q(s,a) + alpha * [R + discount * max_a Q(s'a,) - Q(s,a)]
         original_q_value = self.get_q_value(state, action)
         next_q_value = self.computeValueFromQValues(nextState)
+        current_rep = self.create_board_representation(state)
+        next_state_rep = self.create_board_representation(nextState)
         updated_q_value = original_q_value + self.alpha * (reward + self.discount * next_q_value - original_q_value)
         self.set_q_values(state, action, updated_q_value)
         self.reward_this_episode += reward
@@ -354,9 +357,14 @@ class QLearningAgent(Agent):
             return 0.0
 
     def create_state_action_rep(self, state, action):
-
         state_action = self.create_board_representation(state) + (action,)
         return state_action
+
+    def create_hand_representation(self):
+        non_spades = self.filter_by_suit("Diamonds") + self.filter_by_suit("Hearts") + \
+                     self.filter_by_suit("Clubs")
+        spades = self.filter_by_suit("Spades")
+        return (len(non_spades), len(spades),)
 
     def create_board_representation(self, state):
         board = state.board
@@ -370,7 +378,7 @@ class QLearningAgent(Agent):
                 if result is None:
                     result = (self.create_card_representation(list(board.values())[card]), )
                 else:
-                    result += (self.create_card_representation(list(board.values())[0]), )
+                    result += (self.create_card_representation(list(board.values())[card]), )
         return result
 
 
