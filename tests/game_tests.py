@@ -173,6 +173,50 @@ class QLearningTests(unittest.TestCase):
         actual = players[0].getLegalActions(new_game)
         self.assertEqual(expected, actual)
 
+    def test_reward_function_simple_win(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        players[0].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[1].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        new_game.play_turn()
+        actual_reward = new_game.reward_function(players[0])
+        expected_reward = 500
+        self.assertEqual(expected_reward, actual_reward)
+
+    def test_reward_function_simple_loss(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        players[1].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[0].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        new_game.play_turn()
+        actual_reward = new_game.reward_function(players[0])
+        expected_reward = -100
+        self.assertEqual(expected_reward, actual_reward)
+
+    def test_reward_win_turn(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        players[0].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[0].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[1].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        players[1].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        new_game.play_turn()
+        actual_reward = new_game.reward_function(players[0])
+        expected_reward = 25
+        self.assertEqual(expected_reward, actual_reward)
+
+    def test_reward_lose_turn(self):
+        players = self.test_players.copy()
+        new_game = spades.Spades(players)
+        players[1].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[1].hand.append(pyCardDeck.PokerCard("Spades", 10, "Ten"))
+        players[0].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        players[0].hand.append(pyCardDeck.PokerCard("Hearts", 10, "Ten"))
+        new_game.play_turn()
+        actual_reward = new_game.reward_function(players[0])
+        expected_reward = -5
+        self.assertEqual(expected_reward, actual_reward)
+
 class AgentHelperMethods(unittest.TestCase):
 
     def setUp(self) -> None:

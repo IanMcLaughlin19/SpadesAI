@@ -2,10 +2,10 @@ import pyCardDeck
 from typing import List
 from agents import Agent, RandomAgent, QLearningAgent
 import random
-from copy import deepcopy
+from copy import deepcopy, copy
 class Spades:
 
-    def __init__(self, players: List[Agent], verbose=False, simple_scoring=False):
+    def __init__(self, players: List[Agent], verbose=False, simple_scoring=False, even_decks=False):
         """
         :param players: List of Agents to play a simulated game
         :param verbose: will print out satements on game acitojns
@@ -23,6 +23,7 @@ class Spades:
         self.order_played = {}
         self.final_scores = Spades.initialize_player_dict(players)
         self.simple_scoring = simple_scoring
+        self.even_decks = even_decks
         Spades.assert_unique_index(players)
 
 
@@ -33,15 +34,19 @@ class Spades:
         if not len(indexes_list) == len(indexes_set):
             raise AssertionError("All players must have a unique index")
 
-    def play_x_games(self, num_games=100):
+    def play_x_games(self, num_games=100, even_decks=False):
         score_board = Spades.initialize_player_dict(self.players)
         win_losses = Spades.initialize_player_dict(self.players)
         score_board_last_100 = Spades.initialize_player_dict(self.players)
         round_gone_first_last_100 = Spades.initialize_player_dict(self.players)
+        original_index = []
+        for p in self.players:
+            original_index.append(p.index)
         count_first_player_wins_last_100 = 0
         for game in range(num_games):
             shuffled_first_move = sorted(self.players, key=lambda k: random.random())
-            new_game = Spades(shuffled_first_move)
+            random.shuffle(self.players)
+            new_game = Spades(shuffled_first_move, even_decks=even_decks)
             new_game.play_spades()
             order_index = 0
             for player in self.players:
@@ -63,15 +68,22 @@ class Spades:
                 order_index += 1
             if game % 20 == 0:
                 print("Games completed: ", game)
+        restored_order = []
+        for p in original_index:
+            indexes = list(map(lambda x: x.index, self.players))
+            ind = indexes.index(p)
+            restored_order.append(self.players[ind])
+        self.players = restored_order
         print("Score Board ", str(score_board), " win losses ", str(win_losses))
 
     def play_spades(self):
         for player in self.players:
             player.start_episode()
-        self.initial_deal()
+            player.save_state(self)
+        self.initial_deal(self.even_decks)
         self.place_bets()
         while not self.terminal_test():
-            self.play_full_turn()
+            self.play_turn()
         self.score_game()
         for player in self.players:
             player.end_episode()
@@ -80,11 +92,61 @@ class Spades:
             print("bets ", str(self.bets))
             print("Winner is player ", max(self.final_scores, key=self.final_scores.get), "with score ", max(self.final_scores.values()))
 
-    def play_full_turn(self):
-        self.play_turn()
+    def play_turn(self):
+        playing_order = self.get_playing_order()
+        index = 0
+        for player in playing_order:
+            if type(player) == QLearningAgent:
+                last_score = self.scores[player.index]
+                player.last_score = last_score
+        for player in playing_order:
+            if type(player) == QLearningAgent:
+                player.last_score = copy(self.scores[player.index])
+                action = player.getAction(self)
+                last_reward = player.last_reward
+                if hasattr(player, "last_score") is not None:
+                    player.current_score = self.scores[player.index]
+                    player.update(player.last_action, self, last_reward)
+                    player.save_state(self)
+                player.last_action = action
+                test_state = player.create_state_action_rep(self, action)
+                card = player.map_legal_actions_to_action(action, self)
+            else:
+                card = player.getAction(self)
+            self.place_card(card, player, index)
+            if self.verbose:
+                print("Player ", player.index, " made move ", str(card))
+            index += 1
         self.update_winner()
         self.board = {}
         self.order_played = {}
+        for player in playing_order:
+            if type(player) == QLearningAgent:
+                reward = self.reward_function(player)
+                player.last_reward = reward
+
+    def reward_function(self, agent: Agent):
+        max_score = 0
+        for player in self.players:
+            score = self.scores[player.index]
+            if score > max_score:
+                max_score = score
+        if self.terminal_test():
+            if self.scores[agent.index] == max_score:
+                reward = 100
+            else:
+                reward = -150
+        else:
+            multiplier = agent.get_multiplier_last_action()
+            player_score_intial = agent.last_score
+            current_score = self.scores[agent.index]
+            player_won_turn = current_score > player_score_intial
+            if player_won_turn:
+                reward = 5 * multiplier
+            else:
+                reward = -10 * multiplier
+        return reward
+
     def score_game(self):
         for player in self.players:
             player_bet = self.bets[player.index]
@@ -123,41 +185,6 @@ class Spades:
             self.bets[player.index] = player_bet
             if self.verbose:
                 print("Player ", player.index, " places bet ", player_bet)
-
-    def play_turn(self):
-        playing_order = self.get_playing_order()
-        index = 0
-        for player in playing_order:
-            if type(player) == QLearningAgent:
-                original_state = deepcopy(self)
-                action = player.getAction(self)
-                card = player.map_legal_actions_to_action(action, self)
-            else:
-                card = player.getAction(self)
-            self.place_card(card, player, index)
-            if self.verbose:
-                print("Player ", player.index, " made move ", str(card))
-            index += 1
-
-        for player in playing_order:
-            reward = self.reward_function(player)
-            player.update(original_state, action, self, reward)
-
-    def reward_function(self, agent: Agent):
-        max_score = 0
-        for player in self.players:
-            score = self.scores[player.index]
-            if score > max_score:
-                max_score = score
-        if self.terminal_test():
-            if self.scores[agent.index] == max_score:
-                reward = 250
-            else:
-                reward = -100
-        else:
-            reward = -5
-        return reward
-
 
 
     def place_card(self, card, player, index):
@@ -207,17 +234,45 @@ class Spades:
                 all_hands_empty = False
         return all_hands_empty
 
-    def initial_deal(self):
+    def initial_deal(self, even_decks = False):
         """
         Runs the initial deal, randomly giving each player cards until there is none left
         :return: None
         """
-        while len(self.deck) > 0:
-            for player in self.players:
-                next_card = self.deck.draw()
-                player.hand.append(next_card)
-                if self.verbose:
-                    print("Player ", player.index, " dealt card ", str(next_card))
+        if even_decks:
+            decks = Spades.create_even_decks()
+            players[0].hand = decks[0]
+            players[1].hand = decks[1]
+        else:
+            while len(self.deck) > 0:
+                for player in self.players:
+                    next_card = self.deck.draw()
+                    player.hand.append(next_card)
+                    if self.verbose:
+                        print("Player ", player.index, " dealt card ", str(next_card))
+
+    @staticmethod
+    def create_even_decks():
+        deck = pyCardDeck.Deck()
+        deck.load_standard_deck()
+        ranks = [2, 3, 4, 5, 6, 7, 8, 9, 10, "J", "Q", "K"]
+        suits = ["Spades", "Diamonds", "Clubs", "Hearts"]
+        index = 0
+        hand1 = []
+        hand2 = []
+        for r in ranks:
+            index +=1
+            for suit in suits:
+                card = Spades.create_card(suit, r)
+                if index % 2 == 0:
+                    hand1.append(card)
+                else:
+                    hand2.append(card)
+        return [hand1, hand2]
+
+    @staticmethod
+    def create_card(suit, rank):
+        return pyCardDeck.PokerCard(suit, rank, "Card")
 
     def update_winner(self):
         max_card = None
@@ -254,19 +309,38 @@ class Spades:
         return self.board[0]
 
 
+
+
+
 import pickle
 import datetime as dt
 import numpy as np
+import sys
+import os
 
-def run_x_games_and_pickle(players, num_games, pickle_index=[0]):
+def run_x_games_and_pickle(players, num_games, pickle_index=[0], directory="agentdata", even_decks=False):
     """
     run many games with players and pickle
     """
-    game = Spades(players)
-    game.play_x_games(num_games)
-    for pick in pickle_index:
-        file_name = "QLAGENT_GAMES_" + str(num_games) + get_time_stamp() +".p"
-        pickle.dump(players[pick], open(file_name, "wb"))
+    try:
+        game = Spades(players)
+        game.play_x_games(num_games, even_decks=even_decks)
+        for p in players:
+            if p.index in pickle_index:
+                p.last_state = None
+                file_name = directory + "\\" + str(p.index) + "QLAGENT_GAMES_" + str(num_games) + get_time_stamp() + ".p"
+                pickle.dump(p, open(file_name, "wb"))
+    except KeyboardInterrupt:
+        print('Interrupted')
+        for pick in pickle_index:
+            player = players[pick]
+            player.last_state = None
+            file_name = directory + "\\" + "QLAGENT_GAMES_" + str(num_games) + get_time_stamp() + ".p"
+            pickle.dump(player, open(file_name, "wb"))
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
 
 
@@ -280,8 +354,10 @@ def get_time_stamp():
     return full_ft
 
 if __name__ == "__main__":
-    players = [QLearningAgent(1), RandomAgent(2)]
-    run_x_games_and_pickle(players, 5000)
+    ql_agent = QLearningAgent("Learning Agent Demo")
+    random_agent = RandomAgent("Random Agent")
+    players = [ql_agent, random_agent]
+    run_x_games_and_pickle(players, 10000, pickle_index=[ql_agent.index])
 
 
 
