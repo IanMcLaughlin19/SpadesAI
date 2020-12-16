@@ -3,6 +3,8 @@ from typing import List
 from agents import Agent, RandomAgent, QLearningAgent
 import random
 from copy import deepcopy, copy
+from state_representations import QLearningAgentNew, SRStandard
+
 class Spades:
 
     def __init__(self, players: List[Agent], verbose=False, simple_scoring=False, even_decks=False):
@@ -75,6 +77,7 @@ class Spades:
             restored_order.append(self.players[ind])
         self.players = restored_order
         print("Score Board ", str(score_board), " win losses ", str(win_losses))
+        return score_board, win_losses
 
     def play_spades(self):
         for player in self.players:
@@ -96,19 +99,19 @@ class Spades:
         playing_order = self.get_playing_order()
         index = 0
         for player in playing_order:
-            if type(player) == QLearningAgent:
+            if type(player) == QLearningAgent or type(player) == QLearningAgentNew:
                 last_score = self.scores[player.index]
                 player.last_score = last_score
         for player in playing_order:
-            if type(player) == QLearningAgent:
+            if type(player) == QLearningAgent or type(player) == QLearningAgentNew:
                 player.last_score = copy(self.scores[player.index])
                 action = player.getAction(self)
-                last_reward = player.last_reward
+                last_reward = player.get_last_reward()
                 if hasattr(player, "last_score") is not None:
                     player.current_score = self.scores[player.index]
-                    player.update(player.last_action, self, last_reward)
+                    player.update(player.get_last_action(), self, last_reward)
                     player.save_state(self)
-                player.last_action = action
+                player.set_last_action(action)
                 test_state = player.create_state_action_rep(self, action)
                 card = player.map_legal_actions_to_action(action, self)
             else:
@@ -121,7 +124,7 @@ class Spades:
         self.board = {}
         self.order_played = {}
         for player in playing_order:
-            if type(player) == QLearningAgent:
+            if type(player) == QLearningAgent or type(player) == QLearningAgentNew:
                 reward = self.reward_function(player)
                 player.last_reward = reward
 
@@ -133,9 +136,9 @@ class Spades:
                 max_score = score
         if self.terminal_test():
             if self.scores[agent.index] == max_score:
-                reward = 100
+                reward = 200
             else:
-                reward = -150
+                reward = -250
         else:
             multiplier = agent.get_multiplier_last_action()
             player_score_intial = agent.last_score
@@ -144,7 +147,7 @@ class Spades:
             if player_won_turn:
                 reward = 5 * multiplier
             else:
-                reward = -10 * multiplier
+                reward = -13 * multiplier
         return reward
 
     def score_game(self):
@@ -342,7 +345,60 @@ def run_x_games_and_pickle(players, num_games, pickle_index=[0], directory="agen
         except SystemExit:
             os._exit(0)
 
-
+def run_x_games_and_pickle_incrementally(players, games, pickle_index, pickle_increments: list, folder):
+    """
+    Will run a certain amount of games and save the agent at different points
+    :param players: list of players
+    :param pickle_index: player indexes to pickle
+    :param pickle_increments: increments to pickle at
+    :return: will save several agents
+    """
+    if max(pickle_increments) > games:
+        raise ValueError("Pickle index out of bounds, games: {0} increment: {1}".format(games, max(pickle_increments)))
+    pickle_increments.sort()
+    games_played = 0
+    working_directory = os.getcwd()
+    target_dir = working_directory + "\\agentdata\\" + folder
+    if not os.path.exists(target_dir):
+        os.mkdir(target_dir)
+    for increment in pickle_increments:
+        difference = increment - games_played
+        game = Spades(players)
+        game.play_x_games(difference)
+        games_played += difference
+        for p in players:
+            if p.index in pickle_index:
+                time_stamp = get_time_stamp()
+                full_file_name =target_dir + "\\" + str(p.index) + "_games_played_" + str(games_played) + "_" + time_stamp +".p"
+                pickle.dump(p, open(full_file_name, "wb"))
+                print("Dumped at ", full_file_name)
+import glob
+import pandas as pd
+def analyze_agents_in_folder(folder, directory=os.getcwd() + "\\agentdata\\", benchmark_games=2000):
+    """
+    Takes all pick
+    :return:
+    """
+    folder_target = directory + folder + "\\"
+    files = glob.glob(folder_target + "*.p")
+    df_cols = ["AgentName", "Training Epsiodes", "Win Differential", "Point Differential"]
+    df = pd.DataFrame(columns=df_cols)
+    for file in files:
+        learning_agent = pickle.load(open(file, "rb"))
+        file = file.split("\\")[-1]
+        split = file.split("_")
+        name = split[0]
+        games_played = split[3]
+        players = [learning_agent, RandomAgent("Random")]
+        game = Spades(players=players)
+        learning_agent.epsilon = 0
+        score_board, win_losses = game.play_x_games(benchmark_games)
+        win_dif = win_losses[learning_agent.index] - win_losses['Random']
+        score_differential = score_board[learning_agent.index] - score_board['Random']
+        data = [name, games_played, win_dif, score_differential]
+        new_df = pd.DataFrame(columns=df_cols, data=[data])
+        df = pd.concat([df, new_df])
+    return df
 
 def get_time_stamp():
     time_stamp = dt.datetime.now()
@@ -353,11 +409,11 @@ def get_time_stamp():
     full_ft = '-'.join([day, hour, minute, second])
     return full_ft
 
+from state_representations import SRWithTurnsRemaining, SRWithTurnsAndWinning, SRWithTurnsAndSpades, SRWithWinningAndSpades, SRStandard
 if __name__ == "__main__":
-    ql_agent = QLearningAgent("Learning Agent Demo")
-    random_agent = RandomAgent("Random Agent")
-    players = [ql_agent, random_agent]
-    run_x_games_and_pickle(players, 10000, pickle_index=[ql_agent.index])
+    final = pd.read_csv("final.csv")
+    print("test")
+
 
 
 
